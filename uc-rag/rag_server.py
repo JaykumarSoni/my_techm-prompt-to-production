@@ -167,7 +167,7 @@ def retrieve_and_answer(
             "This question is not covered in the retrieved policy documents. "
             f"Retrieved chunks: [{sources_str}]. Please contact the relevant department for guidance."
         )
-        return {"answer": template, "cited_chunks": []}
+        return {"answer": template, "cited_chunks": [], "refused": True}
         
     context_str = "\n\n---\n\n".join(valid_chunks)
     
@@ -189,7 +189,23 @@ USER QUERY:
 {query}
 """
     answer = llm_call(prompt)
-    return {"answer": answer, "cited_chunks": cited_chunks}
+    return {"answer": answer, "cited_chunks": cited_chunks, "refused": False}
+
+
+def query(question: str, llm_call):
+    """
+    Helper function for MCP server integration.
+    Initializes ChromaDB and embedder, then retrieves and answers.
+    """
+    db_path = os.path.join(os.path.dirname(__file__), "chroma_db")
+    client = chromadb.PersistentClient(path=db_path)
+    try:
+        collection = client.get_collection(name="policy_documents")
+    except Exception:
+        return {"answer": "ChromaDB index not found. Please build index first.", "cited_chunks": [], "refused": True}
+        
+    embedder = SentenceTransformer('BAAI/bge-small-en-v1.5')
+    return retrieve_and_answer(question, collection, embedder, llm_call)
 
 
 # --- INDEX BUILDER ---
